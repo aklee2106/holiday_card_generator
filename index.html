@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Holiday Card Generator</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            max-width: 900px;
+            width: 100%;
+            padding: 40px;
+            text-align: center;
+        }
+
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 2.5em;
+        }
+
+        .subtitle {
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 1.1em;
+        }
+
+        .upload-area {
+            border: 3px dashed #667eea;
+            border-radius: 15px;
+            padding: 60px 20px;
+            margin: 30px 0;
+            background: #f8f9ff;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            position: relative;
+        }
+
+        .upload-area:hover {
+            border-color: #764ba2;
+            background: #f0f2ff;
+        }
+
+        .upload-area.dragover {
+            border-color: #764ba2;
+            background: #e8ebff;
+            transform: scale(1.02);
+        }
+
+        .upload-icon {
+            font-size: 4em;
+            margin-bottom: 20px;
+        }
+
+        .upload-text {
+            font-size: 1.2em;
+            color: #667eea;
+            font-weight: 600;
+            margin-bottom: 10px;
+        }
+
+        .upload-hint {
+            color: #999;
+            font-size: 0.9em;
+        }
+
+        #fileInput {
+            display: none;
+        }
+
+        .preview-section {
+            margin: 30px 0;
+            display: none;
+        }
+
+        .preview-section.active {
+            display: block;
+        }
+
+        .preview-image {
+            max-width: 100%;
+            max-height: 400px;
+            border-radius: 10px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+            margin-bottom: 20px;
+        }
+
+        .holiday-selector {
+            margin: 20px 0;
+        }
+
+        .holiday-selector label {
+            display: block;
+            margin-bottom: 10px;
+            color: #333;
+            font-weight: 600;
+        }
+
+        .holiday-buttons {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+
+        .holiday-btn {
+            padding: 10px 20px;
+            border: 2px solid #667eea;
+            background: white;
+            color: #667eea;
+            border-radius: 25px;
+            cursor: pointer;
+            font-size: 0.9em;
+            transition: all 0.3s ease;
+            font-weight: 600;
+        }
+
+        .holiday-btn:hover {
+            background: #667eea;
+            color: white;
+            transform: translateY(-2px);
+        }
+
+        .holiday-btn.active {
+            background: #764ba2;
+            border-color: #764ba2;
+            color: white;
+        }
+
+        .generate-btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 15px 40px;
+            font-size: 1.1em;
+            border-radius: 30px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+            margin-top: 20px;
+        }
+
+        .generate-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(102, 126, 234, 0.6);
+        }
+
+        .generate-btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .result-section {
+            margin-top: 30px;
+            display: none;
+        }
+
+        .result-section.active {
+            display: block;
+        }
+
+        .result-card {
+            max-width: 100%;
+            border-radius: 10px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+            margin: 20px 0;
+        }
+
+        .download-btn {
+            background: #28a745;
+            color: white;
+            border: none;
+            padding: 12px 30px;
+            font-size: 1em;
+            border-radius: 25px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            margin-top: 15px;
+            text-decoration: none;
+            display: inline-block;
+        }
+
+        .download-btn:hover {
+            background: #218838;
+            transform: translateY(-2px);
+        }
+
+        .loading {
+            display: none;
+            margin: 20px 0;
+        }
+
+        .loading.active {
+            display: block;
+        }
+
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #667eea;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .error {
+            background: #f8d7da;
+            color: #721c24;
+            padding: 15px;
+            border-radius: 10px;
+            margin: 20px 0;
+            display: none;
+        }
+
+        .error.active {
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎄 Holiday Card Generator</h1>
+        <p class="subtitle">Transform your photos into beautiful holiday cards</p>
+
+        <div class="upload-area" id="uploadArea">
+            <div class="upload-icon">📸</div>
+            <div class="upload-text">Click or drag & drop your photo here</div>
+            <div class="upload-hint">Supports JPG, PNG, and other image formats</div>
+            <input type="file" id="fileInput" accept="image/*">
+        </div>
+
+        <div class="preview-section" id="previewSection">
+            <img id="previewImage" class="preview-image" alt="Preview">
+            
+            <div class="holiday-selector">
+                <label>Choose Holiday Theme:</label>
+                <div class="holiday-buttons">
+                    <button class="holiday-btn active" data-holiday="christmas">🎄 Christmas</button>
+                    <button class="holiday-btn" data-holiday="newyear">🎊 New Year</button>
+                    <button class="holiday-btn" data-holiday="hanukkah">🕎 Hanukkah</button>
+                    <button class="holiday-btn" data-holiday="generic">❄️ Generic</button>
+                </div>
+            </div>
+
+            <button class="generate-btn" id="generateBtn">Generate Holiday Card</button>
+        </div>
+
+        <div class="loading" id="loading">
+            <div class="spinner"></div>
+            <p style="margin-top: 15px; color: #666;">Creating your holiday card...</p>
+        </div>
+
+        <div class="error" id="error"></div>
+
+        <div class="result-section" id="resultSection">
+            <h2 style="color: #333; margin-bottom: 15px;">Your Holiday Card is Ready! 🎉</h2>
+            <img id="resultCard" class="result-card" alt="Holiday Card">
+            <br>
+            <a id="downloadBtn" class="download-btn" download="holiday-card.jpg">Download Card</a>
+        </div>
+    </div>
+
+    <script>
+        const uploadArea = document.getElementById('uploadArea');
+        const fileInput = document.getElementById('fileInput');
+        const previewSection = document.getElementById('previewSection');
+        const previewImage = document.getElementById('previewImage');
+        const generateBtn = document.getElementById('generateBtn');
+        const loading = document.getElementById('loading');
+        const resultSection = document.getElementById('resultSection');
+        const resultCard = document.getElementById('resultCard');
+        const downloadBtn = document.getElementById('downloadBtn');
+        const errorDiv = document.getElementById('error');
+        const holidayButtons = document.querySelectorAll('.holiday-btn');
+
+        let selectedHoliday = 'christmas';
+        let uploadedFile = null;
+
+        // Holiday button selection
+        holidayButtons.forEach(btn => {
+            btn.addEventListener('click', () => {
+                holidayButtons.forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                selectedHoliday = btn.dataset.holiday;
+            });
+        });
+
+        // Upload area click
+        uploadArea.addEventListener('click', () => {
+            fileInput.click();
+        });
+
+        // Drag and drop
+        uploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadArea.classList.add('dragover');
+        });
+
+        uploadArea.addEventListener('dragleave', () => {
+            uploadArea.classList.remove('dragover');
+        });
+
+        uploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadArea.classList.remove('dragover');
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                handleFile(files[0]);
+            }
+        });
+
+        // File input change
+        fileInput.addEventListener('change', (e) => {
+            if (e.target.files.length > 0) {
+                handleFile(e.target.files[0]);
+            }
+        });
+
+        function handleFile(file) {
+            if (!file.type.startsWith('image/')) {
+                showError('Please upload an image file');
+                return;
+            }
+
+            uploadedFile = file;
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                previewImage.src = e.target.result;
+                previewSection.classList.add('active');
+                resultSection.classList.remove('active');
+                errorDiv.classList.remove('active');
+            };
+            reader.readAsDataURL(file);
+        }
+
+        // Generate card
+        generateBtn.addEventListener('click', async () => {
+            if (!uploadedFile) {
+                showError('Please upload an image first');
+                return;
+            }
+
+            generateBtn.disabled = true;
+            loading.classList.add('active');
+            resultSection.classList.remove('active');
+            errorDiv.classList.remove('active');
+
+            const formData = new FormData();
+            formData.append('image', uploadedFile);
+            formData.append('holiday_type', selectedHoliday);
+
+            try {
+                console.log('Sending request to generate card...');
+                const response = await fetch('/api/generate-card', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                console.log('Response status:', response.status);
+
+                if (!response.ok) {
+                    const error = await response.json();
+                    console.error('Error response:', error);
+                    throw new Error(error.error || 'Failed to generate card');
+                }
+
+                const blob = await response.blob();
+                console.log('Received blob, size:', blob.size);
+                
+                if (blob.size === 0) {
+                    throw new Error('Received empty image');
+                }
+                
+                const imageUrl = URL.createObjectURL(blob);
+                resultCard.src = imageUrl;
+                downloadBtn.href = imageUrl;
+                resultSection.classList.add('active');
+                console.log('Card displayed successfully');
+            } catch (error) {
+                console.error('Error:', error);
+                showError(error.message || 'An error occurred. Check the console for details.');
+            } finally {
+                loading.classList.remove('active');
+                generateBtn.disabled = false;
+            }
+        });
+
+        function showError(message) {
+            errorDiv.textContent = message;
+            errorDiv.classList.add('active');
+        }
+    </script>
+</body>
+</html>
+
