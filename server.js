@@ -4,10 +4,15 @@ const sharp = require('sharp');
 const path = require('path');
 const fs = require('fs').promises;
 const cors = require('cors');
+const { HfInference } = require('@huggingface/inference');
+require('dotenv').config();
 
 const app = express();
 app.use(cors());
 app.use(express.static('public'));
+
+// Initialize Hugging Face client
+const hf = new HfInference(process.env.HUGGINGFACE_API_KEY);
 
 // Create directories if they don't exist
 const UPLOAD_FOLDER = 'uploads';
@@ -39,6 +44,174 @@ const upload = multer({
     storage: storage,
     limits: { fileSize: 10 * 1024 * 1024 } // 10MB limit
 });
+
+// Transform image using Hugging Face AI to add Christmas sweaters
+async function transformImageWithAI(imageBuffer) {
+    try {
+        console.log('Transforming image with AI...');
+        
+        const prompt = "people wearing festive ugly christmas sweaters with red and green patterns, holiday theme";
+        
+        // Convert Buffer to Blob for Hugging Face API
+        const blob = new Blob([imageBuffer], { type: 'image/jpeg' });
+        
+        // Try different available models
+        const models = [
+            "stabilityai/stable-diffusion-2-1",
+            "runwayml/stable-diffusion-v1-5",
+            "CompVis/stable-diffusion-v1-4"
+        ];
+        
+        let result = null;
+        let lastError = null;
+        
+        for (const model of models) {
+            try {
+                console.log(`Trying model: ${model}`);
+                result = await hf.imageToImage({
+                    model: model,
+                    inputs: blob,
+                    parameters: {
+                        prompt: prompt,
+                        negative_prompt: "blurry, distorted, low quality",
+                        num_inference_steps: 20,
+                        guidance_scale: 7.5,
+                        strength: 0.7 // Keep 30% of original image
+                    }
+                });
+                console.log(`✓ Success with model: ${model}`);
+                break;
+            } catch (modelError) {
+                console.log(`✗ Model ${model} failed: ${modelError.message}`);
+                lastError = modelError;
+                continue;
+            }
+        }
+        
+        if (!result) {
+            throw lastError || new Error('All models failed');
+        }
+        
+        // Convert result to buffer
+        const aiImageBuffer = Buffer.from(await result.arrayBuffer());
+        console.log('✓ AI transformation complete');
+        
+        return aiImageBuffer;
+    } catch (error) {
+        console.error('Error with AI transformation:', error.message);
+        throw error;
+    }
+}
+
+// Create a Christmas sweater pattern SVG (fallback if AI fails)
+function createSweaterPattern(width, height) {
+    // Use pattern size that scales with image size
+    const patternSize = Math.max(60, Math.min(width, height) / 10);
+    const red = '#dc143c'; // Bright red
+    const green = '#228b22'; // Forest green  
+    const white = '#ffffff';
+    
+    // Draw pattern directly in SVG (more reliable than pattern definitions)
+    let svg = `<svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">`;
+    
+    // Red background
+    svg += `<rect width="${width}" height="${height}" fill="${red}"/>`;
+    
+    // Green horizontal stripes - make them thicker and more visible
+    const stripeHeight = Math.max(12, patternSize * 0.25);
+    const stripeSpacing = patternSize * 0.5;
+    
+    // Draw multiple stripes across the height
+    for (let y = stripeSpacing; y < height; y += patternSize) {
+        svg += `<rect x="0" y="${y}" width="${width}" height="${stripeHeight}" fill="${green}"/>`;
+    }
+    
+    // White snowflake decorations - spaced evenly
+    const decorationRadius = Math.max(4, patternSize * 0.2);
+    for (let y = patternSize * 0.5; y < height; y += patternSize) {
+        for (let x = patternSize * 0.5; x < width; x += patternSize) {
+            svg += `<circle cx="${x}" cy="${y}" r="${decorationRadius}" fill="${white}"/>`;
+        }
+    }
+    
+    svg += `</svg>`;
+    return svg;
+}
+
+// Detect skin tones and estimate person regions
+async function detectPersonRegions(imageBuffer, width, height) {
+    // Get raw pixel data
+    const { data, info } = await sharp(imageBuffer)
+        .raw()
+        .toBuffer({ resolveWithObject: true });
+    
+    const regions = [];
+    const skinThreshold = {
+        rMin: 95, rMax: 240,
+        gMin: 40, gMax: 210,
+        bMin: 20, bMax: 180
+    };
+    
+    // Sample pixels to find skin-tone regions (faces, necks, arms)
+    const sampleRate = 10; // Sample every 10th pixel for performance
+    const skinPixels = [];
+    
+    for (let y = 0; y < info.height; y += sampleRate) {
+        for (let x = 0; x < info.width; x += sampleRate) {
+            const idx = (y * info.width + x) * info.channels;
+            const r = data[idx];
+            const g = data[idx + 1];
+            const b = data[idx + 2];
+            
+            // Check if pixel matches skin tone
+            if (r >= skinThreshold.rMin && r <= skinThreshold.rMax &&
+                g >= skinThreshold.gMin && g <= skinThreshold.gMax &&
+                b >= skinThreshold.bMin && b <= skinThreshold.bMax) {
+                skinPixels.push({ x, y });
+            }
+        }
+    }
+    
+    if (skinPixels.length === 0) {
+        console.log('No skin tones detected, using center region as fallback');
+        // Fallback: assume person is in center
+        return [{
+            x: Math.floor(width * 0.2),
+            y: Math.floor(height * 0.1),
+            width: Math.floor(width * 0.6),
+            height: Math.floor(height * 0.7)
+        }];
+    }
+    
+    // Find bounding boxes for skin regions (likely faces/necks)
+    const minX = Math.min(...skinPixels.map(p => p.x));
+    const maxX = Math.max(...skinPixels.map(p => p.x));
+    const minY = Math.min(...skinPixels.map(p => p.y));
+    const maxY = Math.max(...skinPixels.map(p => p.y));
+    
+    // Estimate torso region based on detected face/neck area
+    // Torso is typically below the face and wider
+    const faceWidth = maxX - minX;
+    const faceHeight = maxY - minY;
+    const faceCenterX = (minX + maxX) / 2;
+    const faceCenterY = (minY + maxY) / 2;
+    
+    // Estimate torso dimensions (typically 1.5-2x face width, 2-3x face height)
+    const torsoWidth = Math.max(faceWidth * 1.8, width * 0.3);
+    const torsoHeight = Math.max(faceHeight * 2.5, height * 0.4);
+    const torsoX = Math.max(0, faceCenterX - torsoWidth / 2);
+    const torsoY = Math.min(height - torsoHeight, faceCenterY + faceHeight * 0.5);
+    
+    regions.push({
+        x: Math.floor(torsoX),
+        y: Math.floor(torsoY),
+        width: Math.floor(Math.min(torsoWidth, width - torsoX)),
+        height: Math.floor(Math.min(torsoHeight, height - torsoY))
+    });
+    
+    console.log(`Detected ${skinPixels.length} skin pixels, estimated torso region:`, regions[0]);
+    return regions;
+}
 
 function createSVGOverlay(cardWidth, cardHeight, holidayType) {
     const padding = 50;
@@ -173,21 +346,142 @@ async function createHolidayCard(imagePath, holidayType = 'christmas') {
         
         console.log('Resized image buffer size:', resizedImage.length);
         
-        // Composite: background + image + SVG overlay
-        const cardBuffer = await background
-            .composite([
-                {
-                    input: resizedImage,
-                    top: padding,
-                    left: padding
-                },
-                {
-                    input: svgOverlay,
-                    top: 0,
-                    left: 0,
-                    blend: 'over' // Ensure proper blending
+        // For Christmas theme, use AI to transform the image
+        let processedImageBuffer = resizedImage;
+        
+        console.log('=== AI Transformation Check ===');
+        console.log('Holiday type:', holidayType);
+        console.log('API key exists:', !!process.env.HUGGINGFACE_API_KEY);
+        console.log('API key value:', process.env.HUGGINGFACE_API_KEY ? process.env.HUGGINGFACE_API_KEY.substring(0, 10) + '...' : 'NOT SET');
+        
+        if (holidayType === 'christmas' && process.env.HUGGINGFACE_API_KEY && process.env.HUGGINGFACE_API_KEY !== 'your_api_key_here') {
+            try {
+                console.log('✓ Calling AI to add Christmas sweaters...');
+                processedImageBuffer = await transformImageWithAI(resizedImage);
+                console.log('✓ AI transformation successful!');
+            } catch (aiError) {
+                console.error('✗ AI transformation failed:', aiError.message);
+                console.error('Full error:', aiError);
+                // Fall back to original image if AI fails
+            }
+        } else if (holidayType === 'christmas') {
+            console.log('✗ No valid Hugging Face API key found, skipping AI transformation');
+            console.log('   Get your key at: https://huggingface.co/settings/tokens');
+        }
+        
+        // Create sweater overlays for fallback (if needed)
+        let sweaterOverlays = [];
+        if (false && holidayType === 'christmas') { // Disabled overlay approach when using AI
+            try {
+                console.log('Creating sweater overlays for Christmas theme...');
+                
+                // Apply sweater to lower torso region (below faces, on clothing)
+                // Position it lower to avoid covering faces
+                const sweaterWidth = Math.floor(width * 0.6);
+                const sweaterHeight = Math.floor(height * 0.35);
+                const sweaterX = Math.floor((width - sweaterWidth) / 2);
+                const sweaterY = Math.floor(height * 0.35); // Start lower to avoid faces
+                
+                const compositeTop = padding + sweaterY;
+                const compositeLeft = padding + sweaterX;
+                
+                console.log(`Creating sweater: ${sweaterWidth}x${sweaterHeight} at (${compositeLeft}, ${compositeTop})`);
+                
+                // Create sweater pattern SVG
+                const sweaterPattern = createSweaterPattern(sweaterWidth, sweaterHeight);
+                
+                // Convert SVG to PNG buffer
+                const sweaterBuffer = await sharp(Buffer.from(sweaterPattern))
+                    .png()
+                    .toBuffer();
+                
+                // Verify dimensions
+                const sweaterMetadata = await sharp(sweaterBuffer).metadata();
+                console.log(`Sweater buffer created: ${sweaterMetadata.width}x${sweaterMetadata.height}`);
+                
+                // Resize to exact dimensions if needed
+                let finalSweaterBuffer = sweaterBuffer;
+                if (sweaterMetadata.width !== sweaterWidth || sweaterMetadata.height !== sweaterHeight) {
+                    console.log(`Resizing sweater from ${sweaterMetadata.width}x${sweaterMetadata.height} to ${sweaterWidth}x${sweaterHeight}`);
+                    finalSweaterBuffer = await sharp(sweaterBuffer)
+                        .resize(sweaterWidth, sweaterHeight, { fit: 'fill' })
+                        .png()
+                        .toBuffer();
                 }
-            ])
+                
+                // Use 'overlay' blend mode with reduced opacity for a more natural clothing effect
+                // This will make the pattern visible but blend with the underlying clothing
+                sweaterOverlays.push({
+                    input: finalSweaterBuffer,
+                    top: compositeTop,
+                    left: compositeLeft,
+                    blend: 'overlay' // Overlay blend mode for better integration
+                });
+                
+                console.log(`Successfully added sweater overlay to composite layers`);
+                
+                // Also try to detect and add more sweaters if people are detected
+                try {
+                    const personRegions = await detectPersonRegions(resizedImage, width, height);
+                    console.log(`Also detected ${personRegions.length} person region(s) for additional sweaters`);
+                    
+                    for (const region of personRegions) {
+                        const regionTop = padding + region.y;
+                        const regionLeft = padding + region.x;
+                        const regionWidth = Math.min(region.width, width - region.x, cardWidth - regionLeft);
+                        const regionHeight = Math.min(region.height, height - region.y, cardHeight - regionTop);
+                        
+                        if (regionWidth > 0 && regionHeight > 0 && 
+                            regionTop >= 0 && regionLeft >= 0 &&
+                            regionTop + regionHeight <= cardHeight &&
+                            regionLeft + regionWidth <= cardWidth) {
+                            
+                            const pattern = createSweaterPattern(regionWidth, regionHeight);
+                            const buffer = await sharp(Buffer.from(pattern))
+                                .resize(regionWidth, regionHeight, { fit: 'fill' })
+                                .png()
+                                .toBuffer();
+                            
+                            sweaterOverlays.push({
+                                input: buffer,
+                                top: regionTop,
+                                left: regionLeft,
+                                blend: 'overlay'
+                            });
+                            
+                            console.log(`Added additional sweater at (${regionLeft}, ${regionTop})`);
+                        }
+                    }
+                } catch (detectError) {
+                    console.log('Person detection failed, using default sweater only:', detectError.message);
+                }
+                
+            } catch (error) {
+                console.error('Error creating sweater overlays:', error);
+                console.error('Error stack:', error.stack);
+            }
+        }
+        
+        console.log(`Total sweater overlays to apply: ${sweaterOverlays.length}`);
+        
+        // Composite: background + processed image (AI-transformed or original) + sweater overlays + SVG overlay
+        const compositeLayers = [
+            {
+                input: processedImageBuffer,
+                top: padding,
+                left: padding
+            },
+            ...sweaterOverlays,
+            {
+                input: svgOverlay,
+                top: 0,
+                left: 0,
+                blend: 'over' // Ensure proper blending
+            }
+        ];
+        
+        const cardBuffer = await background
+            .composite(compositeLayers)
             .jpeg({ quality: 95 })
             .toBuffer();
         

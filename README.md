@@ -7,6 +7,7 @@ A beautiful web application that transforms your photos into stunning holiday ca
 - 🎨 **Beautiful UI**: Modern, responsive design with smooth animations
 - 📸 **Easy Upload**: Drag & drop or click to upload your photos
 - 🎄 **Multiple Themes**: Choose from Christmas, New Year, Hanukkah, or Generic holiday themes
+- 🤖 **AI-Powered**: Uses Hugging Face AI to transform people into Christmas sweaters
 - 🖼️ **Automatic Processing**: Images are automatically resized and enhanced
 - 💾 **Download**: Save your generated holiday cards instantly
 
@@ -16,6 +17,7 @@ A beautiful web application that transforms your photos into stunning holiday ca
 
 - Node.js 14.x or higher
 - npm (Node Package Manager)
+- Hugging Face API key (free - see SETUP.md)
 
 ### Installation
 
@@ -24,7 +26,16 @@ A beautiful web application that transforms your photos into stunning holiday ca
    npm install
    ```
 
-2. **Run the application:**
+2. **Set up Hugging Face API (for AI Christmas sweaters):**
+   - Create a free account at https://huggingface.co
+   - Get your API token from https://huggingface.co/settings/tokens
+   - Create a `.env` file in the project root:
+     ```
+     HUGGINGFACE_API_KEY=hf_your_token_here
+     ```
+   - See `SETUP.md` for detailed instructions
+
+3. **Run the application:**
    ```bash
    npm start
    ```
@@ -34,7 +45,7 @@ A beautiful web application that transforms your photos into stunning holiday ca
    npm run dev
    ```
 
-3. **Open your browser:**
+4. **Open your browser:**
    Navigate to `http://localhost:3000`
 
 ## Usage
